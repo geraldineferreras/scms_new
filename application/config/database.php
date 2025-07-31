@@ -78,10 +78,10 @@ if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['RAILWAY_SERVICE_MYSQL_UR
     // Use Railway database configuration
     $db['default'] = array(
         'dsn'	=> '',
-        'hostname' => $_ENV['RAILWAY_SERVICE_MYSQL_URL'] ?? 'mysql-production-6c5b.up.railway.app',
-        'username' => $_ENV['DB_USER'] ?? 'root',
-        'password' => $_ENV['DB_PASSWORD'] ?? 'tenvsjMAjkGkHHHupLrvTqlsvssZkUGK',
-        'database' => $_ENV['DB_NAME'] ?? 'railway',
+        'hostname' => 'yamabiko.proxy.rlwy.net',
+        'username' => 'root',
+        'password' => 'tenvsjMAjkGkHHHupLrvTqlsvssZkUGK',
+        'database' => 'railway',
         'dbdriver' => 'mysqli',
         'dbprefix' => '',
         'pconnect' => FALSE,
@@ -96,6 +96,7 @@ if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['RAILWAY_SERVICE_MYSQL_UR
         'stricton' => FALSE,
         'failover' => array(),
         'save_queries' => FALSE // Disable query saving in production
+		
     );
 } else {
     /* Use local development configuration
