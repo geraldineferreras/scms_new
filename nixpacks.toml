@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["php", "php81Extensions.mysqli"]
-
-[phases.install]
-cmds = ["echo 'Installing PHP only - no Apache'"]
-
-[start]
-cmd = "php -S 0.0.0.0:$PORT -t . index.php" 
