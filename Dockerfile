@@ -14,12 +14,15 @@ WORKDIR /var/www/html
 # Copy application files
 COPY . .
 
+# Make start script executable
+RUN chmod +x start.sh
+
 # Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
-# Expose port
+# Expose port (Railway will override this)
 EXPOSE 8080
 
-# Start PHP built-in server
-CMD ["php", "-S", "0.0.0.0:8080", "-t", ".", "index.php"] 
+# Start using the start script
+CMD ["./start.sh"] 
