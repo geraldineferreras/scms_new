@@ -74,17 +74,37 @@ $active_group = 'default';
 $query_builder = TRUE;
 
 // Check if we're on Railway (production)
-if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['DB_HOST'])) {
-    // Use production database configuration
-    include_once(APPPATH . 'config/database_production.php');
-} else {
-    // Use local development configuration
+if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['RAILWAY_SERVICE_MYSQL_URL'])) {
+    // Use Railway database configuration
     $db['default'] = array(
         'dsn'	=> '',
-        'hostname' => 'mysql.railway.internal',
+        'hostname' => $_ENV['RAILWAY_SERVICE_MYSQL_URL'] ?? 'mysql-production-6c5b.up.railway.app',
+        'username' => $_ENV['DB_USER'] ?? 'root',
+        'password' => $_ENV['DB_PASSWORD'] ?? 'tenvsjMAjkGkHHHupLrvTqlsvssZkUGK',
+        'database' => $_ENV['DB_NAME'] ?? 'railway',
+        'dbdriver' => 'mysqli',
+        'dbprefix' => '',
+        'pconnect' => FALSE,
+        'db_debug' => FALSE, // Disable debug in production
+        'cache_on' => FALSE,
+        'cachedir' => '',
+        'char_set' => 'utf8',
+        'dbcollat' => 'utf8_general_ci',
+        'swap_pre' => '',
+        'encrypt' => FALSE,
+        'compress' => FALSE,
+        'stricton' => FALSE,
+        'failover' => array(),
+        'save_queries' => FALSE // Disable query saving in production
+    );
+} else {
+    /* Use local development configuration
+    $db['default'] = array(
+        'dsn'	=> '',
+        'hostname' => 'localhost:3308',
         'username' => 'root',
-        'password' => 'tenvsjMAjkGkHHHupLrvTqlsvssZkUGK',
-        'database' => 'railway',
+        'password' => '',
+        'database' => 'scms_db',
         'dbdriver' => 'mysqli',
         'dbprefix' => '',
         'pconnect' => FALSE,
@@ -100,4 +120,5 @@ if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['DB_HOST'])) {
         'failover' => array(),
         'save_queries' => TRUE
     );
+	*/
 }
