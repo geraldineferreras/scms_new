@@ -14,40 +14,83 @@ class Auth extends BaseController {
     }
 
     public function login() {
-        $data = json_decode(file_get_contents('php://input'));
+        try {
+            // Enable error reporting for debugging
+            error_reporting(E_ALL);
+            ini_set('display_errors', 1);
+            
+            // Log the request
+            log_message('debug', 'Login request received');
+            
+            $data = json_decode(file_get_contents('php://input'));
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
-            $this->output
-                ->set_status_header(400)
-                ->set_content_type('application/json')
-                ->set_output(json_encode(['status' => false, 'message' => 'Invalid JSON format']));
-            return;
-        }
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                log_message('error', 'JSON decode error: ' . json_last_error_msg());
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Invalid JSON format']));
+                return;
+            }
 
-        log_message('debug', 'Incoming login data: ' . json_encode($data));
+            log_message('debug', 'Incoming login data: ' . json_encode($data));
 
-        $email = isset($data->email) ? $data->email : null;
-        $password = isset($data->password) ? $data->password : null;
+            $email = isset($data->email) ? $data->email : null;
+            $password = isset($data->password) ? $data->password : null;
 
-        if (empty($email) || empty($password)) {
-            $this->output
-                ->set_status_header(400)
-                ->set_content_type('application/json')
-                ->set_output(json_encode(['status' => false, 'message' => 'Email and Password are required']));
-            return;
-        }
+            if (empty($email) || empty($password)) {
+                log_message('error', 'Missing email or password');
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Email and Password are required']));
+                return;
+            }
 
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $this->output
-                ->set_status_header(400)
-                ->set_content_type('application/json')
-                ->set_output(json_encode(['status' => false, 'message' => 'Invalid email format']));
-            return;
-        }
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                log_message('error', 'Invalid email format: ' . $email);
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Invalid email format']));
+                return;
+            }
 
-        $user = $this->User_model->get_by_email($email);
-        if ($user && password_verify($password, $user['password'])) {
+            // Test database connection
+            try {
+                $this->load->database();
+                log_message('debug', 'Database connection successful');
+            } catch (Exception $e) {
+                log_message('error', 'Database connection failed: ' . $e->getMessage());
+                $this->output
+                    ->set_status_header(500)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Database connection error']));
+                return;
+            }
+
+            $user = $this->User_model->get_by_email($email);
+            
+            if (!$user) {
+                log_message('error', 'User not found: ' . $email);
+                $this->output
+                    ->set_status_header(401)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Invalid email or password']));
+                return;
+            }
+
+            if (!password_verify($password, $user['password'])) {
+                log_message('error', 'Invalid password for user: ' . $email);
+                $this->output
+                    ->set_status_header(401)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Invalid email or password']));
+                return;
+            }
+
             if ($user['status'] !== 'active') {
+                log_message('error', 'Inactive account: ' . $email);
                 $this->output
                     ->set_status_header(403)
                     ->set_content_type('application/json')
@@ -56,44 +99,71 @@ class Auth extends BaseController {
             }
 
             // Update last_login
-            $this->User_model->update($user['user_id'], [
-                'last_login' => date('Y-m-d H:i:s')
-            ]);
+            try {
+                $this->User_model->update($user['user_id'], [
+                    'last_login' => date('Y-m-d H:i:s')
+                ]);
+                log_message('debug', 'Last login updated for user: ' . $email);
+            } catch (Exception $e) {
+                log_message('error', 'Failed to update last_login: ' . $e->getMessage());
+                // Continue with login even if last_login update fails
+            }
 
             // Generate JWT token
-            $token_payload = [
-                'user_id' => $user['user_id'],
-                'role' => $user['role'],
-                'email' => $user['email'],
-                'full_name' => $user['full_name']
-            ];
-            $token = $this->token_lib->generate_token($token_payload);
+            try {
+                $token_payload = [
+                    'user_id' => $user['user_id'],
+                    'role' => $user['role'],
+                    'email' => $user['email'],
+                    'full_name' => $user['full_name']
+                ];
+                $token = $this->token_lib->generate_token($token_payload);
+                log_message('debug', 'Token generated successfully for user: ' . $email);
+            } catch (Exception $e) {
+                log_message('error', 'Token generation failed: ' . $e->getMessage());
+                $this->output
+                    ->set_status_header(500)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode(['status' => false, 'message' => 'Token generation error']));
+                return;
+            }
 
+            $response = [
+                'status' => true,
+                'message' => 'Login successful',
+                'data' => [
+                    'role' => $user['role'],
+                    'user_id' => $user['user_id'],
+                    'full_name' => $user['full_name'],
+                    'email' => $user['email'],
+                    'status' => $user['status'],
+                    'last_login' => date('Y-m-d H:i:s'),
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                    'expires_in' => $this->token_lib->get_expiration_time()
+                ]
+            ];
+
+            log_message('debug', 'Login successful for user: ' . $email);
+            
             $this->output
                 ->set_status_header(200)
                 ->set_content_type('application/json')
+                ->set_output(json_encode($response));
+                
+        } catch (Exception $e) {
+            log_message('error', 'Login error: ' . $e->getMessage());
+            log_message('error', 'Stack trace: ' . $e->getTraceAsString());
+            
+            $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
                 ->set_output(json_encode([
-                    'status' => true,
-                    'message' => 'Login successful',
-                    'data' => [
-                        'role' => $user['role'],
-                        'user_id' => $user['user_id'],
-                        'full_name' => $user['full_name'],
-                        'email' => $user['email'],
-                        'status' => $user['status'],
-                        'last_login' => date('Y-m-d H:i:s'),
-                        'token' => $token,
-                        'token_type' => 'Bearer',
-                        'expires_in' => $this->token_lib->get_expiration_time()
-                    ]
+                    'status' => false, 
+                    'message' => 'Internal server error',
+                    'debug' => ENVIRONMENT === 'development' ? $e->getMessage() : null
                 ]));
-            return;
         }
-
-        $this->output
-            ->set_status_header(401)
-            ->set_content_type('application/json')
-            ->set_output(json_encode(['status' => false, 'message' => 'Invalid email or password']));
     }
 
     public function register() {

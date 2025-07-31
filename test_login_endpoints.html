@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login API Testing</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .response {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 10px 0;
+            white-space: pre-wrap;
+            font-family: monospace;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .info {
+            background: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <h1>Login API Testing Tool</h1>
+    
+    <div class="test-section">
+        <h2>1. Test Basic Endpoint</h2>
+        <p>Test if the basic test endpoint is working:</p>
+        <button class="test-button" onclick="testBasicEndpoint()">Test Basic Endpoint</button>
+        <div id="basic-response" class="response"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. Test Database Connection</h2>
+        <p>Test if the database connection is working:</p>
+        <button class="test-button" onclick="testDatabase()">Test Database</button>
+        <div id="db-response" class="response"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. Test Configuration</h2>
+        <p>Test if the configuration is loaded correctly:</p>
+        <button class="test-button" onclick="testConfig()">Test Config</button>
+        <div id="config-response" class="response"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>4. Test Login Endpoint</h2>
+        <p>Test the actual login endpoint with sample credentials:</p>
+        <button class="test-button" onclick="testLogin()">Test Login</button>
+        <div id="login-response" class="response"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>5. Debug Information</h2>
+        <p>Current test environment:</p>
+        <div class="response info">
+            Base URL: https://scmsnew-production.up.railway.app
+            Test Email: dhvsuadmin@example.com
+            Test Password: 123456789
+        </div>
+    </div>
+
+    <script>
+        const BASE_URL = 'https://scmsnew-production.up.railway.app';
+
+        async function makeRequest(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    data = { raw_response: text };
+                }
+                
+                return {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: data,
+                    headers: Object.fromEntries(response.headers.entries())
+                };
+            } catch (error) {
+                return {
+                    error: error.message,
+                    status: 0
+                };
+            }
+        }
+
+        function displayResponse(elementId, result) {
+            const element = document.getElementById(elementId);
+            let content = '';
+            
+            if (result.error) {
+                content = `❌ Error: ${result.error}`;
+                element.className = 'response error';
+            } else {
+                content = `Status: ${result.status} ${result.statusText}\n`;
+                content += `Headers: ${JSON.stringify(result.headers, null, 2)}\n`;
+                content += `Response: ${JSON.stringify(result.data, null, 2)}`;
+                
+                if (result.status >= 200 && result.status < 300) {
+                    element.className = 'response success';
+                } else if (result.status >= 400) {
+                    element.className = 'response error';
+                } else {
+                    element.className = 'response';
+                }
+            }
+            
+            element.textContent = content;
+        }
+
+        async function testBasicEndpoint() {
+            const result = await makeRequest(`${BASE_URL}/api/test-auth/login`, {
+                method: 'GET'
+            });
+            displayResponse('basic-response', result);
+        }
+
+        async function testDatabase() {
+            const result = await makeRequest(`${BASE_URL}/api/test-auth/db`, {
+                method: 'GET'
+            });
+            displayResponse('db-response', result);
+        }
+
+        async function testConfig() {
+            const result = await makeRequest(`${BASE_URL}/api/test-auth/config`, {
+                method: 'GET'
+            });
+            displayResponse('config-response', result);
+        }
+
+        async function testLogin() {
+            const result = await makeRequest(`${BASE_URL}/api/login`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    email: 'dhvsuadmin@example.com',
+                    password: '123456789'
+                })
+            });
+            displayResponse('login-response', result);
+        }
+
+        // Auto-run basic tests on page load
+        window.onload = function() {
+            setTimeout(() => {
+                testBasicEndpoint();
+                setTimeout(() => testDatabase(), 1000);
+                setTimeout(() => testConfig(), 2000);
+            }, 500);
+        };
+    </script>
+</body>
+</html> 

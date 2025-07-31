@@ -61,6 +61,11 @@ $route['api/refresh-token']['post'] = 'api/auth/refresh_token';
 $route['api/validate-token']['get'] = 'api/auth/validate_token';
 $route['api/logout']['post'] = 'api/auth/logout';
 
+// Test endpoints for debugging
+$route['api/test-auth/login']['get'] = 'api/TestAuth/login';
+$route['api/test-auth/db']['get'] = 'api/TestAuth/test_db';
+$route['api/test-auth/config']['get'] = 'api/TestAuth/test_config';
+
 // User Management
 $route['api/users']['get'] = 'api/auth/get_users';
 $route['api/users']['options'] = 'api/auth/options';
