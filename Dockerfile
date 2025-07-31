@@ -22,7 +22,7 @@ RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
 # Expose port (Railway will override this)
-EXPOSE 8080
+EXPOSE $PORT
 
 # Start using the start script
 CMD ["./start.sh"] 
