@@ -17,6 +17,25 @@ user_guide_src/cilexer/dist/*
 user_guide_src/cilexer/pycilexer.egg-info/*
 /vendor/
 
+# Environment files
+.env
+.env.local
+.env.production
+
+# Railway specific
+.railway/
+
+# Database backups
+*.sql
+*.sqlite
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
 # IDE Files
 #-------------------------
 /nbproject/
