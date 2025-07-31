@@ -2,10 +2,12 @@
     RewriteEngine On
     RewriteBase /
 
-    # If the request is not for a real file or directory
+    # Redirect Trailing Slashes...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.+)/$ /$1 [L,R=301]
+
+    # Remove index.php from URL
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
-
-    # Rewrite everything to index.php
     RewriteRule ^(.*)$ index.php/$1 [L]
-</IfModule> 
+</IfModule>
