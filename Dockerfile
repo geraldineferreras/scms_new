@@ -24,11 +24,8 @@ COPY apache.conf /etc/apache2/sites-available/000-default.conf
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 755 /var/www/html
 
-# Configure Apache to listen on the port Railway provides
-RUN sed -i 's/Listen 80/Listen $PORT/' /etc/apache2/ports.conf
-
 # Expose port (Railway will override this)
 EXPOSE $PORT
 
-# Start Apache
-CMD ["apache2-foreground"] 
+# Start Apache with proper port configuration
+CMD sed -i "s/Listen 8080/Listen $PORT/" /etc/apache2/ports.conf && apache2-foreground 
