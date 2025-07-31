@@ -79,25 +79,25 @@ if (isset($_ENV['RAILWAY_ENVIRONMENT']) || isset($_ENV['DB_HOST'])) {
     include_once(APPPATH . 'config/database_production.php');
 } else {
     // Use local development configuration
-    $db['default'] = array(
-        'dsn'	=> '',
-        'hostname' => 'mysql.railway.internal',
-        'username' => 'root',
-        'password' => '',
-        'database' => 'scms_db',
-        'dbdriver' => 'mysqli',
-        'dbprefix' => '',
-        'pconnect' => FALSE,
-        'db_debug' => (ENVIRONMENT !== 'production'),
-        'cache_on' => FALSE,
-        'cachedir' => '',
-        'char_set' => 'utf8',
-        'dbcollat' => 'utf8_general_ci',
-        'swap_pre' => '',
-        'encrypt' => FALSE,
-        'compress' => FALSE,
-        'stricton' => FALSE,
-        'failover' => array(),
-        'save_queries' => TRUE
-    );
+	$db['default'] = array(
+		'dsn'	=> '',
+		'hostname' => $_ENV['DB_HOST'] ?? 'mysql.railway.internal',
+		'username' => $_ENV['DB_USER'] ?? 'root',
+		'password' => $_ENV['DB_PASSWORD'] ?? 'tenvsjMAjkGkHHHupLrvTqlsvssZkUGK',
+		'database' => $_ENV['DB_NAME'] ?? 'railway',
+		'dbdriver' => 'mysqli',
+		'dbprefix' => '',
+		'pconnect' => FALSE,
+		'db_debug' => FALSE, // Disable debug in production
+		'cache_on' => FALSE,
+		'cachedir' => '',
+		'char_set' => 'utf8',
+		'dbcollat' => 'utf8_general_ci',
+		'swap_pre' => '',
+		'encrypt' => FALSE,
+		'compress' => FALSE,
+		'stricton' => FALSE,
+		'failover' => array(),
+		'save_queries' => FALSE // Disable query saving in production
+	); 
 }
