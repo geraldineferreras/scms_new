@@ -9,7 +9,7 @@ echo "Working directory: $(pwd)"
 echo "Files in directory:"
 ls -la
 echo ""
-echo "Starting PHP built-in server..."
-echo "Command: php -S 0.0.0.0:${PORT:-8080} -t . index.php"
+echo "Starting PHP built-in server with CodeIgniter routing..."
+echo "Command: php -S 0.0.0.0:${PORT:-8080} -t . router.php"
 echo "Listening on: 0.0.0.0:${PORT:-8080}"
-php -S 0.0.0.0:${PORT:-8080} -t . index.php 
+php -S 0.0.0.0:${PORT:-8080} -t . router.php 
