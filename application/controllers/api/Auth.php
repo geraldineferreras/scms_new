@@ -13,6 +13,322 @@ class Auth extends BaseController {
         $this->load->library('Token_lib');
     }
 
+    // Google OAuth Configuration
+    private function getGoogleOAuthConfig() {
+        return [
+            'client_id' => '44239670641-jddshdurb1ub7jaiktnpv6piugs2go2c.apps.googleusercontent.com',
+            'client_secret' => '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v',
+            'redirect_uri' => 'https://scmsnew-production.up.railway.app/index.php/api/auth/google-callback',
+            'auth_url' => 'https://accounts.google.com/o/oauth2/v2/auth',
+            'token_url' => 'https://oauth2.googleapis.com/token',
+            'userinfo_url' => 'https://www.googleapis.com/oauth2/v2/userinfo'
+        ];
+    }
+
+    // Google OAuth Login - Returns authorization URL
+    public function google_login() {
+        try {
+            $config = $this->getGoogleOAuthConfig();
+            
+            $params = [
+                'client_id' => $config['client_id'],
+                'redirect_uri' => $config['redirect_uri'],
+                'response_type' => 'code',
+                'scope' => 'email profile',
+                'access_type' => 'offline',
+                'prompt' => 'consent'
+            ];
+            
+            $auth_url = $config['auth_url'] . '?' . http_build_query($params);
+            
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'status' => true,
+                    'message' => 'Google OAuth URL generated',
+                    'data' => [
+                        'auth_url' => $auth_url
+                    ]
+                ]));
+                
+        } catch (Exception $e) {
+            log_message('error', 'Google OAuth URL generation error: ' . $e->getMessage());
+            $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'status' => false,
+                    'message' => 'Failed to generate Google OAuth URL'
+                ]));
+        }
+    }
+
+    // Google OAuth Signup with Role Selection
+    public function google_signup() {
+        try {
+            $data = json_decode(file_get_contents('php://input'));
+            
+            if (!$data || !isset($data->google_data) || !isset($data->selected_role)) {
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'status' => false,
+                        'message' => 'Missing required data'
+                    ]));
+                return;
+            }
+            
+            $google_data = $data->google_data;
+            $selected_role = $data->selected_role;
+            
+            // Validate role
+            $valid_roles = ['admin', 'teacher', 'student'];
+            if (!in_array($selected_role, $valid_roles)) {
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'status' => false,
+                        'message' => 'Invalid role selected'
+                    ]));
+                return;
+            }
+            
+            // Check if user already exists
+            $existing_user = $this->User_model->get_by_email($google_data->email);
+            
+            if ($existing_user) {
+                // Update existing user's role if needed
+                if ($existing_user['role'] !== $selected_role) {
+                    $this->User_model->update($existing_user['user_id'], [
+                        'role' => $selected_role,
+                        'google_id' => $google_data->id,
+                        'profile_picture' => $google_data->picture ?? $existing_user['profile_picture'],
+                        'last_login' => date('Y-m-d H:i:s')
+                    ]);
+                    $existing_user = $this->User_model->get_by_id($existing_user['user_id']);
+                }
+                
+                $user = $existing_user;
+            } else {
+                // Create new user with selected role
+                $user_data = [
+                    'email' => $google_data->email,
+                    'full_name' => $google_data->name,
+                    'password' => password_hash(uniqid(), PASSWORD_DEFAULT),
+                    'role' => $selected_role,
+                    'status' => 'active',
+                    'google_id' => $google_data->id,
+                    'profile_picture' => $google_data->picture ?? null,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'last_login' => date('Y-m-d H:i:s')
+                ];
+                
+                $this->db->insert('users', $user_data);
+                $user_id = $this->db->insert_id();
+                $user = $this->User_model->get_by_id($user_id);
+            }
+            
+            // Generate JWT token
+            $token_payload = [
+                'user_id' => $user['user_id'],
+                'role' => $user['role'],
+                'email' => $user['email'],
+                'full_name' => $user['full_name']
+            ];
+            
+            $token = $this->token_lib->generate_token($token_payload);
+            
+            $response = [
+                'status' => true,
+                'message' => 'Account created successfully',
+                'data' => [
+                    'role' => $user['role'],
+                    'user_id' => $user['user_id'],
+                    'full_name' => $user['full_name'],
+                    'email' => $user['email'],
+                    'status' => $user['status'],
+                    'last_login' => date('Y-m-d H:i:s'),
+                    'token' => $token,
+                    'token_type' => 'Bearer',
+                    'expires_in' => $this->token_lib->get_expiration_time()
+                ]
+            ];
+            
+            $this->output
+                ->set_status_header(200)
+                ->set_content_type('application/json')
+                ->set_output(json_encode($response));
+                
+        } catch (Exception $e) {
+            log_message('error', 'Google signup error: ' . $e->getMessage());
+            $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'status' => false,
+                    'message' => 'Account creation failed'
+                ]));
+        }
+    }
+
+    // Modified Google OAuth Callback to redirect to role selection for new users
+    public function google_callback() {
+        try {
+            $code = $this->input->get('code');
+            
+            if (!$code) {
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'status' => false,
+                        'message' => 'Authorization code not received'
+                    ]));
+                return;
+            }
+            
+            $config = $this->getGoogleOAuthConfig();
+            
+            // Exchange code for access token
+            $token_data = $this->exchangeCodeForToken($code, $config);
+            
+            if (!$token_data) {
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'status' => false,
+                        'message' => 'Failed to exchange code for token'
+                    ]));
+                return;
+            }
+            
+            // Get user info from Google
+            $user_info = $this->getGoogleUserInfo($token_data['access_token']);
+            
+            if (!$user_info) {
+                $this->output
+                    ->set_status_header(400)
+                    ->set_content_type('application/json')
+                    ->set_output(json_encode([
+                        'status' => false,
+                        'message' => 'Failed to get user info from Google'
+                    ]));
+                return;
+            }
+            
+            // Check if user exists
+            $user = $this->User_model->get_by_email($user_info['email']);
+            
+            if ($user) {
+                // Existing user - proceed with normal login
+                $update_data = [
+                    'google_id' => $user_info['id'],
+                    'profile_picture' => $user_info['picture'] ?? $user['profile_picture'],
+                    'last_login' => date('Y-m-d H:i:s')
+                ];
+                
+                $this->User_model->update($user['user_id'], $update_data);
+                $user = $this->User_model->get_by_id($user['user_id']);
+                
+                // Generate JWT token for existing user
+                $token_payload = [
+                    'user_id' => $user['user_id'],
+                    'role' => $user['role'],
+                    'email' => $user['email'],
+                    'full_name' => $user['full_name']
+                ];
+                
+                $token = $this->token_lib->generate_token($token_payload);
+                
+                // Redirect to frontend with token
+                $frontend_url = 'https://your-frontend-domain.vercel.app'; // Update this
+                $redirect_url = $frontend_url . '?token=' . urlencode($token) . '&user_id=' . $user['user_id'];
+                
+                redirect($redirect_url);
+                
+            } else {
+                // New user - redirect to role selection
+                $google_data = [
+                    'id' => $user_info['id'],
+                    'email' => $user_info['email'],
+                    'name' => $user_info['name'],
+                    'picture' => $user_info['picture'] ?? null
+                ];
+                
+                $frontend_url = 'https://your-frontend-domain.vercel.app'; // Update this
+                $redirect_url = $frontend_url . '/google_oauth_role_selection.html?google_data=' . urlencode(json_encode($google_data));
+                
+                redirect($redirect_url);
+            }
+            
+        } catch (Exception $e) {
+            log_message('error', 'Google OAuth callback error: ' . $e->getMessage());
+            $this->output
+                ->set_status_header(500)
+                ->set_content_type('application/json')
+                ->set_output(json_encode([
+                    'status' => false,
+                    'message' => 'OAuth callback error'
+                ]));
+        }
+    }
+
+    // Exchange authorization code for access token
+    private function exchangeCodeForToken($code, $config) {
+        $post_data = [
+            'client_id' => $config['client_id'],
+            'client_secret' => $config['client_secret'],
+            'code' => $code,
+            'grant_type' => 'authorization_code',
+            'redirect_uri' => $config['redirect_uri']
+        ];
+        
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $config['token_url']);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($post_data));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/x-www-form-urlencoded'
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code === 200) {
+            return json_decode($response, true);
+        }
+        
+        log_message('error', 'Token exchange failed: ' . $response);
+        return null;
+    }
+
+    // Get user info from Google
+    private function getGoogleUserInfo($access_token) {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $this->getGoogleOAuthConfig()['userinfo_url']);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Authorization: Bearer ' . $access_token
+        ]);
+        
+        $response = curl_exec($ch);
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        
+        if ($http_code === 200) {
+            return json_decode($response, true);
+        }
+        
+        log_message('error', 'User info fetch failed: ' . $response);
+        return null;
+    }
+
     public function login() {
         try {
             // Enable error reporting for debugging

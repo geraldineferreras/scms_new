@@ -9,6 +9,7 @@ class CORS_hook {
         
         // Allow specific origins (add your frontend URLs here)
         $allowed_origins = [
+            // Local development
             'http://localhost:3000',
             'http://localhost:3001',
             'http://localhost:8080',
@@ -18,7 +19,16 @@ class CORS_hook {
             'http://127.0.0.1:8080',
             'http://127.0.0.1:5173',
             'http://localhost',
-            'http://127.0.0.1'
+            'http://127.0.0.1',
+            
+            // Vercel domains (add your actual Vercel domain here)
+            'https://scms-updated.vercel.app',
+            'https://scms-updated-git-main-geraldineferreras-projects.vercel.app',
+            'https://scms-updated-djvbhlhpj-geraldineferreras-projects.vercel.app',
+
+            
+            // Production domains
+            'https://scmsnew-production.up.railway.app'
         ];
         
         // Check if origin is allowed or use wildcard for development
@@ -29,13 +39,13 @@ class CORS_hook {
             header('Access-Control-Allow-Origin: *');
         }
         
-        // Allow specific methods
+        // Allow specific methods (including all attendance API methods)
         header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, PATCH');
         
-        // Allow specific headers
-        header('Access-Control-Allow-Headers: Content-Type, Content-Length, Accept-Encoding, Authorization, X-Requested-With, X-API-Key, Cache-Control, Pragma, Origin, Accept, X-CSRF-TOKEN, X-XSRF-TOKEN, X-HTTP-Method-Override');
+        // Allow specific headers (including Authorization for JWT tokens)
+        header('Access-Control-Allow-Headers: Content-Type, Content-Length, Accept-Encoding, Authorization, X-Requested-With, X-API-Key, Cache-Control, Pragma, Origin, Accept, X-CSRF-TOKEN, X-XSRF-TOKEN, X-HTTP-Method-Override, X-Auth-Token');
         
-        // Allow credentials
+        // Allow credentials (for cookies/sessions if needed)
         header('Access-Control-Allow-Credentials: true');
         
         // Handle preflight requests

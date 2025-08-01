@@ -54,12 +54,15 @@ $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;
 
 // Auth
-$route['api/login']['post'] = 'api/auth/login';
-$route['api/register']['post'] = 'api/auth/register';
-$route['api/test']['post'] = 'api/auth/test_password';
-$route['api/refresh-token']['post'] = 'api/auth/refresh_token';
-$route['api/validate-token']['get'] = 'api/auth/validate_token';
-$route['api/logout']['post'] = 'api/auth/logout';
+$route['api/auth/login']['post'] = 'api/auth/login';
+$route['api/auth/register']['post'] = 'api/auth/register';
+$route['api/auth/test']['post'] = 'api/auth/test_password';
+$route['api/auth/refresh-token']['post'] = 'api/auth/refresh_token';
+$route['api/auth/validate-token']['get'] = 'api/auth/validate_token';
+$route['api/auth/logout']['post'] = 'api/auth/logout';
+$route['api/auth/google-login']['get'] = 'api/auth/google_login';
+$route['api/auth/google-callback']['get'] = 'api/auth/google_callback';
+$route['api/auth/google-signup']['post'] = 'api/auth/google_signup';
 
 // Test endpoints for debugging
 $route['api/test-auth/login']['get'] = 'api/TestAuth/login';
@@ -118,8 +121,12 @@ $route['api/admin/academic-years']['get'] = 'api/AdminController/academic_years_
 $route['api/admin/students/available']['get'] = 'api/AdminController/available_students_get';
 $route['api/admin/students']['get'] = 'api/AdminController/all_students_get';
 
-// Teacher APIs
-$route['api/teacher/attendance']['post'] = 'teachercontroller/mark_attendance_qr';
+// Teacher Attendance APIs (simplified for subject-section combinations)
+$route['api/teacher/attendance/subjects']['get'] = 'api/TeacherController/attendance_subjects_get';
+$route['api/teacher/attendance/qr-scan']['post'] = 'api/TeacherController/attendance_qr_scan';
+$route['api/teacher/attendance/manual']['post'] = 'api/TeacherController/attendance_manual';
+$route['api/teacher/attendance/records']['get'] = 'api/TeacherController/attendance_records_get';
+$route['api/teacher/attendance/stats']['get'] = 'api/TeacherController/attendance_stats_get';
 
 // Student APIs
 $route['api/student/grades']['get'] = 'studentcontroller/get_my_grades';

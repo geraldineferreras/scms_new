@@ -782,4 +782,535 @@ class TeacherController extends BaseController
         
         return json_response(true, 'Enrollment statistics retrieved successfully', $stats);
     }
+
+    // --- Teacher Attendance Management ---
+
+    /**
+     * Get teacher's subjects for attendance
+     * GET /api/teacher/attendance/subjects
+     */
+    public function attendance_subjects_get() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        try {
+            // Get unique subject-section combinations for the teacher
+            $subjects = $this->db->select('DISTINCT subjects.subject_name, subjects.subject_code, sections.section_name, 
+                                         CONCAT(subjects.subject_name, " ", sections.section_name) as subject_section')
+                                ->from('classes')
+                                ->join('subjects', 'classes.subject_id = subjects.id')
+                                ->join('sections', 'classes.section_id = sections.section_id')
+                                ->where('classes.teacher_id', $user_data['user_id'])
+                                ->order_by('subjects.subject_name', 'ASC')
+                                ->order_by('sections.section_name', 'ASC')
+                                ->get()->result_array();
+            
+            return json_response(true, 'Subjects retrieved successfully', $subjects);
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error retrieving subjects: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Mark attendance via QR code scan (simplified for subject-section combination)
+     * POST /api/teacher/attendance/qr-scan
+     */
+    public function attendance_qr_scan() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        $this->load->model('Attendance_model');
+        $data = json_decode(file_get_contents('php://input'), true);
+        
+        if (!$data || !isset($data['qr_data']) || !isset($data['subject_section'])) {
+            return json_response(false, 'Missing required data: qr_data and subject_section', null, 400);
+        }
+        
+        try {
+            // Parse QR data (format: "IDNo: 2021305973\nFull Name: ANJELA SOFIA G. SARMIENTO\nProgram: Bachelor of Science in Information Technology")
+            $qr_lines = explode("\n", $data['qr_data']);
+            $qr_info = [];
+            
+            foreach ($qr_lines as $line) {
+                if (strpos($line, ':') !== false) {
+                    $parts = explode(':', $line, 2);
+                    $key = trim($parts[0]);
+                    $value = trim($parts[1]);
+                    $qr_info[$key] = $value;
+                }
+            }
+            
+            // Extract student information from QR
+            $student_id_no = isset($qr_info['IDNo']) ? $qr_info['IDNo'] : null;
+            $student_full_name = isset($qr_info['Full Name']) ? $qr_info['Full Name'] : null;
+            $student_program = isset($qr_info['Program']) ? $qr_info['Program'] : null;
+            
+            if (!$student_id_no) {
+                return json_response(false, 'Invalid QR code: Missing student ID number', null, 400);
+            }
+            
+            $subject_section = $data['subject_section']; // e.g., "OOP BSIT1A"
+            $date = date('Y-m-d');
+            $time_in = date('H:i:s');
+            
+            // Verify teacher has this subject-section combination
+            $teacher_class = $this->db->select('classes.*, subjects.subject_name, sections.section_name')
+                                    ->from('classes')
+                                    ->join('subjects', 'classes.subject_id = subjects.id')
+                                    ->join('sections', 'classes.section_id = sections.section_id')
+                                    ->where('classes.teacher_id', $user_data['user_id'])
+                                    ->where('CONCAT(subjects.subject_name, " ", sections.section_name)', $subject_section)
+                                    ->get()->row_array();
+            
+            if (!$teacher_class) {
+                return json_response(false, 'Teacher not assigned to this subject-section', null, 400);
+            }
+            
+            // Find student by ID number in the specific section
+            $student = $this->db->where('student_num', $student_id_no)
+                               ->where('section_id', $teacher_class['section_id'])
+                               ->where('role', 'student')
+                               ->get('users')->row_array();
+            
+            if (!$student) {
+                return json_response(false, 'Student not enrolled in this section', null, 400);
+            }
+            
+            // Verify student name matches (additional security)
+            if ($student_full_name && $student['full_name'] !== $student_full_name) {
+                return json_response(false, 'Student information mismatch', null, 400);
+            }
+            
+            // Check if attendance already exists for today (subject-section + student)
+            $existing_attendance = $this->db->where('student_id', $student_id_no)
+                                          ->where('subject_section', $subject_section)
+                                          ->where('date', $date)
+                                          ->get('attendance')->row_array();
+            
+            if ($existing_attendance) {
+                return json_response(false, 'Attendance already recorded for this student today', null, 400);
+            }
+            
+            // Determine attendance status based on time
+            $current_time = date('H:i:s');
+            $late_threshold = '08:00:00'; // Adjust as needed
+            $attendance_status = ($current_time <= $late_threshold) ? 'present' : 'late';
+            
+            // Insert attendance record (simplified structure)
+            $attendance_data = [
+                'student_id' => $student_id_no, // varchar(20) - using the ID number directly
+                'subject_section' => $subject_section, // e.g., "OOP BSIT1A"
+                'date' => $date, // date
+                'time_in' => $time_in, // time
+                'status' => $attendance_status // enum('present','late','absent','excused') with default 'present'
+            ];
+            
+            $this->db->insert('attendance', $attendance_data);
+            $attendance_id = $this->db->insert_id();
+            
+            return json_response(true, 'Attendance marked successfully', [
+                'attendance_id' => $attendance_id,
+                'student_name' => $student['full_name'],
+                'student_id' => $student_id_no,
+                'student_program' => $student_program,
+                'status' => $attendance_status,
+                'time_in' => $time_in,
+                'subject_section' => $subject_section,
+                'date' => $date,
+                'qr_data_parsed' => [
+                    'id_no' => $student_id_no,
+                    'full_name' => $student_full_name,
+                    'program' => $student_program
+                ]
+            ]);
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error marking attendance: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Manual attendance entry for a subject-section
+     * POST /api/teacher/attendance/manual
+     */
+    public function attendance_manual() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        $this->load->model('Attendance_model');
+        $data = json_decode(file_get_contents('php://input'), true);
+        
+        if (!$data || !isset($data['subject_section']) || !isset($data['student_id']) || !isset($data['status'])) {
+            return json_response(false, 'Missing required data: subject_section, student_id, and status', null, 400);
+        }
+        
+        // Validate status
+        $valid_statuses = ['present', 'late', 'absent', 'excused'];
+        if (!in_array($data['status'], $valid_statuses)) {
+            return json_response(false, 'Invalid status. Must be: present, late, absent, or excused', null, 400);
+        }
+        
+        try {
+            $subject_section = $data['subject_section']; // e.g., "OOP BSIT1A"
+            $student_id = $data['student_id'];
+            $status = $data['status'];
+            $date = isset($data['date']) ? $data['date'] : date('Y-m-d');
+            $time_in = isset($data['time_in']) ? $data['time_in'] : date('H:i:s');
+            
+            // Verify teacher has this subject-section
+            $teacher_class = $this->db->select('classes.*, subjects.subject_name, sections.section_name')
+                                    ->from('classes')
+                                    ->join('subjects', 'classes.subject_id = subjects.id')
+                                    ->join('sections', 'classes.section_id = sections.section_id')
+                                    ->where('classes.teacher_id', $user_data['user_id'])
+                                    ->where('CONCAT(subjects.subject_name, " ", sections.section_name)', $subject_section)
+                                    ->get()->row_array();
+            
+            if (!$teacher_class) {
+                return json_response(false, 'Teacher not assigned to this subject-section', null, 400);
+            }
+            
+            // Check if student is enrolled in this section
+            $student = $this->db->where('student_num', $student_id)
+                               ->where('section_id', $teacher_class['section_id'])
+                               ->where('role', 'student')
+                               ->get('users')->row_array();
+            
+            if (!$student) {
+                return json_response(false, 'Student not enrolled in this section', null, 400);
+            }
+            
+            // Check if attendance already exists for today
+            $existing_attendance = $this->db->where('student_id', $student_id)
+                                          ->where('subject_section', $subject_section)
+                                          ->where('date', $date)
+                                          ->get('attendance')->row_array();
+            
+            if ($existing_attendance) {
+                // Update existing attendance
+                $this->db->where('attendance_id', $existing_attendance['attendance_id'])
+                         ->update('attendance', [
+                             'status' => $status,
+                             'time_in' => $time_in
+                         ]);
+                
+                return json_response(true, 'Attendance updated successfully', [
+                    'attendance_id' => $existing_attendance['attendance_id'],
+                    'student_name' => $student['full_name'],
+                    'student_id' => $student_id,
+                    'status' => $status,
+                    'time_in' => $time_in,
+                    'subject_section' => $subject_section,
+                    'date' => $date,
+                    'action' => 'updated'
+                ]);
+            } else {
+                // Insert new attendance
+                $attendance_data = [
+                    'student_id' => $student_id,
+                    'subject_section' => $subject_section,
+                    'date' => $date,
+                    'time_in' => $time_in,
+                    'status' => $status
+                ];
+                
+                $this->db->insert('attendance', $attendance_data);
+                $attendance_id = $this->db->insert_id();
+                
+                return json_response(true, 'Attendance marked successfully', [
+                    'attendance_id' => $attendance_id,
+                    'student_name' => $student['full_name'],
+                    'student_id' => $student_id,
+                    'status' => $status,
+                    'time_in' => $time_in,
+                    'subject_section' => $subject_section,
+                    'date' => $date,
+                    'action' => 'created'
+                ]);
+            }
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error marking attendance: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Get attendance records (flexible - all records or specific subject-section)
+     * GET /api/teacher/attendance/records (all records for teacher)
+     * GET /api/teacher/attendance/records?subject_section=OOP BSIT1A (specific subject-section)
+     * GET /api/teacher/attendance/records?subject_section=OOP BSIT1A&date=2025-01-27 (specific date)
+     */
+    public function attendance_records_get() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        try {
+            $subject_section = $this->input->get('subject_section');
+            $date = $this->input->get('date');
+            
+            // Build the query
+            $this->db->select('attendance.*, users.full_name as student_name, users.student_num')
+                     ->from('attendance')
+                     ->join('users', 'attendance.student_id = users.student_num');
+            
+            // If subject_section is provided, filter by it
+            if ($subject_section) {
+                // Verify teacher has this subject-section
+                $teacher_class = $this->db->select('classes.*, subjects.subject_name, sections.section_name')
+                                        ->from('classes')
+                                        ->join('subjects', 'classes.subject_id = subjects.id')
+                                        ->join('sections', 'classes.section_id = sections.section_id')
+                                        ->where('classes.teacher_id', $user_data['user_id'])
+                                        ->where('CONCAT(subjects.subject_name, " ", sections.section_name)', $subject_section)
+                                        ->get()->row_array();
+                
+                if (!$teacher_class) {
+                    return json_response(false, 'Teacher not assigned to this subject-section', null, 400);
+                }
+                
+                $this->db->where('attendance.subject_section', $subject_section);
+            } else {
+                // Get all subject-sections for this teacher
+                $teacher_subjects = $this->db->select('DISTINCT CONCAT(subjects.subject_name, " ", sections.section_name) as subject_section')
+                                           ->from('classes')
+                                           ->join('subjects', 'classes.subject_id = subjects.id')
+                                           ->join('sections', 'classes.section_id = sections.section_id')
+                                           ->where('classes.teacher_id', $user_data['user_id'])
+                                           ->get()->result_array();
+                
+                if (empty($teacher_subjects)) {
+                    return json_response(true, 'No attendance records found', [
+                        'records' => [],
+                        'summary' => 'No classes assigned to this teacher'
+                    ]);
+                }
+                
+                $subject_sections = array_column($teacher_subjects, 'subject_section');
+                $this->db->where_in('attendance.subject_section', $subject_sections);
+            }
+            
+            // If date is provided, filter by it
+            if ($date) {
+                $this->db->where('attendance.date', $date);
+            }
+            
+            $attendance = $this->db->order_by('attendance.date', 'DESC')
+                                  ->order_by('attendance.subject_section', 'ASC')
+                                  ->order_by('users.full_name', 'ASC')
+                                  ->get()->result_array();
+            
+            // Group records by subject-section and date for better organization
+            $grouped_records = [];
+            foreach ($attendance as $record) {
+                $key = $record['subject_section'] . '_' . $record['date'];
+                if (!isset($grouped_records[$key])) {
+                    $grouped_records[$key] = [
+                        'subject_section' => $record['subject_section'],
+                        'date' => $record['date'],
+                        'records' => []
+                    ];
+                }
+                $grouped_records[$key]['records'][] = $record;
+            }
+            
+            $response_data = [
+                'records' => array_values($grouped_records),
+                'total_records' => count($attendance),
+                'filters' => [
+                    'subject_section' => $subject_section ?: 'all',
+                    'date' => $date ?: 'all'
+                ]
+            ];
+            
+            return json_response(true, 'Attendance records retrieved successfully', $response_data);
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error retrieving attendance: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Get attendance statistics (flexible - all stats or specific subject-section)
+     * GET /api/teacher/attendance/stats (all stats for teacher)
+     * GET /api/teacher/attendance/stats?subject_section=OOP BSIT1A (specific subject-section)
+     */
+    public function attendance_stats_get() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        try {
+            $subject_section = $this->input->get('subject_section');
+            
+            if ($subject_section) {
+                // Get stats for specific subject-section
+                $teacher_class = $this->db->select('classes.*, subjects.subject_name, sections.section_name')
+                                        ->from('classes')
+                                        ->join('subjects', 'classes.subject_id = subjects.id')
+                                        ->join('sections', 'classes.section_id = sections.section_id')
+                                        ->where('classes.teacher_id', $user_data['user_id'])
+                                        ->where('CONCAT(subjects.subject_name, " ", sections.section_name)', $subject_section)
+                                        ->get()->row_array();
+                
+                if (!$teacher_class) {
+                    return json_response(false, 'Teacher not assigned to this subject-section', null, 400);
+                }
+                
+                $stats = $this->db->select('
+                    COUNT(*) as total_records,
+                    SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_count,
+                    SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
+                    SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_count,
+                    SUM(CASE WHEN status = "excused" THEN 1 ELSE 0 END) as excused_count
+                ')
+                ->from('attendance')
+                ->where('subject_section', $subject_section)
+                ->get()->row_array();
+                
+                return json_response(true, 'Statistics retrieved successfully', [
+                    'subject_section' => $subject_section,
+                    'statistics' => $stats
+                ]);
+                
+            } else {
+                // Get stats for all subject-sections assigned to teacher
+                $teacher_subjects = $this->db->select('DISTINCT CONCAT(subjects.subject_name, " ", sections.section_name) as subject_section')
+                                           ->from('classes')
+                                           ->join('subjects', 'classes.subject_id = subjects.id')
+                                           ->join('sections', 'classes.section_id = sections.section_id')
+                                           ->where('classes.teacher_id', $user_data['user_id'])
+                                           ->get()->result_array();
+                
+                if (empty($teacher_subjects)) {
+                    return json_response(true, 'No statistics available', [
+                        'summary' => 'No classes assigned to this teacher',
+                        'statistics' => []
+                    ]);
+                }
+                
+                $subject_sections = array_column($teacher_subjects, 'subject_section');
+                
+                // Get overall stats
+                $overall_stats = $this->db->select('
+                    COUNT(*) as total_records,
+                    SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_count,
+                    SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
+                    SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_count,
+                    SUM(CASE WHEN status = "excused" THEN 1 ELSE 0 END) as excused_count
+                ')
+                ->from('attendance')
+                ->where_in('subject_section', $subject_sections)
+                ->get()->row_array();
+                
+                // Get stats per subject-section
+                $per_subject_stats = [];
+                foreach ($subject_sections as $subject_section) {
+                    $stats = $this->db->select('
+                        COUNT(*) as total_records,
+                        SUM(CASE WHEN status = "present" THEN 1 ELSE 0 END) as present_count,
+                        SUM(CASE WHEN status = "late" THEN 1 ELSE 0 END) as late_count,
+                        SUM(CASE WHEN status = "absent" THEN 1 ELSE 0 END) as absent_count,
+                        SUM(CASE WHEN status = "excused" THEN 1 ELSE 0 END) as excused_count
+                    ')
+                    ->from('attendance')
+                    ->where('subject_section', $subject_section)
+                    ->get()->row_array();
+                    
+                    $per_subject_stats[] = [
+                        'subject_section' => $subject_section,
+                        'statistics' => $stats
+                    ];
+                }
+                
+                return json_response(true, 'Statistics retrieved successfully', [
+                    'overall_statistics' => $overall_stats,
+                    'per_subject_statistics' => $per_subject_stats,
+                    'total_subject_sections' => count($subject_sections)
+                ]);
+            }
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error retrieving statistics: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Export attendance data
+     * POST /api/teacher/attendance/export
+     */
+    public function attendance_export() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        $data = json_decode(file_get_contents('php://input'), true);
+        
+        if (!$data || !isset($data['section_id'])) {
+            return json_response(false, 'Missing required data: section_id', null, 400);
+        }
+        
+        $section_id = $data['section_id'];
+        $date_from = isset($data['date_from']) ? $data['date_from'] : date('Y-m-d', strtotime('-30 days'));
+        $date_to = isset($data['date_to']) ? $data['date_to'] : date('Y-m-d');
+        
+        try {
+            $this->load->model('Attendance_model');
+            
+            $filters = [
+                'section_id' => $section_id,
+                'teacher_id' => $user_data['user_id'],
+                'date_from' => $date_from,
+                'date_to' => $date_to
+            ];
+            
+            $attendance_data = $this->Attendance_model->get_attendance_report($filters);
+            
+            // Format data for export
+            $export_data = [];
+            foreach ($attendance_data as $record) {
+                $export_data[] = [
+                    'Date' => $record['date'],
+                    'Student Name' => $record['student_name'],
+                    'Student ID' => $record['student_id'],
+                    'Section' => $record['section_name'],
+                    'Subject' => $record['subject_name'],
+                    'Status' => ucfirst($record['attendance_status']),
+                    'Time In' => $record['time_in'],
+                    'Notes' => $record['notes']
+                ];
+            }
+            
+            return json_response(true, 'Export data generated successfully', [
+                'data' => $export_data,
+                'total_records' => count($export_data),
+                'date_range' => $date_from . ' to ' . $date_to
+            ]);
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error generating export: ' . $e->getMessage(), null, 500);
+        }
+    }
+
+    /**
+     * Get sections assigned to teacher for attendance
+     * GET /api/teacher/attendance/sections
+     */
+    public function attendance_sections_get() {
+        $user_data = require_teacher($this);
+        if (!$user_data) return;
+        
+        try {
+            // Get sections where teacher has classes
+            $sections = $this->db->select('DISTINCT sections.section_id, sections.section_name, subjects.subject_name, subjects.subject_code')
+                               ->from('classes')
+                               ->join('sections', 'classes.section_id = sections.section_id')
+                               ->join('subjects', 'classes.subject_id = subjects.id')
+                               ->where('classes.teacher_id', $user_data['user_id'])
+                               ->get()->result_array();
+            
+            return json_response(true, 'Teacher sections retrieved successfully', $sections);
+            
+        } catch (Exception $e) {
+            return json_response(false, 'Error retrieving sections: ' . $e->getMessage(), null, 500);
+        }
+    }
 }

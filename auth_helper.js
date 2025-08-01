@@ -1,24 +1,7 @@
 // Authentication Helper for SCMS API
 class AuthHelper {
     constructor() {
-        this.baseURL = 'http://localhost/scms_new/index.php/api';
-        this.tokenKey = 'auth_token';
-    }
-
-    // Get stored token
-    getToken() {
-        return localStorage.getItem(this.tokenKey) || sessionStorage.getItem(this.tokenKey);
-    }
-
-    // Set token
-    setToken(token) {
-        localStorage.setItem(this.tokenKey, token);
-    }
-
-    // Remove token
-    removeToken() {
-        localStorage.removeItem(this.tokenKey);
-        sessionStorage.removeItem(this.tokenKey);
+        this.baseURL = 'https://scmsnew-production.up.railway.app/index.php/api';
     }
 
     // Check if user is authenticated
@@ -29,7 +12,7 @@ class AuthHelper {
     // Login function
     async login(email, password) {
         try {
-            const response = await fetch(`${this.baseURL}/login`, {
+            const response = await fetch(`${this.baseURL}/auth/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -40,7 +23,7 @@ class AuthHelper {
 
             const data = await response.json();
 
-            if (data.success && data.data.token) {
+            if (data.status && data.data.token) {
                 this.setToken(data.data.token);
                 return {
                     success: true,
@@ -60,12 +43,74 @@ class AuthHelper {
         }
     }
 
+    // Google OAuth Login
+    async googleLogin() {
+        try {
+            // Get Google OAuth URL from backend
+            const response = await fetch(`${this.baseURL}/auth/google-login`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.status && data.data.auth_url) {
+                // Redirect to Google OAuth
+                window.location.href = data.data.auth_url;
+                return {
+                    success: true,
+                    message: 'Redirecting to Google OAuth'
+                };
+            } else {
+                return {
+                    success: false,
+                    message: data.message || 'Failed to get Google OAuth URL'
+                };
+            }
+        } catch (error) {
+            return {
+                success: false,
+                message: error.message || 'Network error'
+            };
+        }
+    }
+
+    // Handle OAuth callback (called when user returns from Google)
+    handleOAuthCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const userId = urlParams.get('user_id');
+
+        if (token && userId) {
+            // Store the token
+            this.setToken(token);
+            
+            // Clear URL parameters
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, document.title, newUrl);
+            
+            return {
+                success: true,
+                message: 'Google OAuth login successful',
+                user: { user_id: userId }
+            };
+        }
+
+        return {
+            success: false,
+            message: 'No OAuth token received'
+        };
+    }
+
     // Logout function
     async logout() {
         try {
             const token = this.getToken();
             if (token) {
-                await fetch(`${this.baseURL}/logout`, {
+                const response = await fetch(`${this.baseURL}/auth/logout`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -77,143 +122,107 @@ class AuthHelper {
         } catch (error) {
             console.error('Logout error:', error);
         } finally {
-            this.removeToken();
+            // Always clear local storage
+            this.clearToken();
+            this.clearUser();
         }
+    }
+
+    // Set token in localStorage
+    setToken(token) {
+        localStorage.setItem('auth_token', token);
+    }
+
+    // Get token from localStorage
+    getToken() {
+        return localStorage.getItem('auth_token');
+    }
+
+    // Clear token from localStorage
+    clearToken() {
+        localStorage.removeItem('auth_token');
+    }
+
+    // Set user data in localStorage
+    setUser(user) {
+        localStorage.setItem('user_data', JSON.stringify(user));
+    }
+
+    // Get user data from localStorage
+    getUser() {
+        const userData = localStorage.getItem('user_data');
+        return userData ? JSON.parse(userData) : null;
+    }
+
+    // Clear user data from localStorage
+    clearUser() {
+        localStorage.removeItem('user_data');
+    }
+
+    // Get authentication headers
+    getAuthHeaders() {
+        const token = this.getToken();
+        return {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` })
+        };
     }
 
     // Make authenticated API request
-    async makeRequest(endpoint, options = {}) {
-        const token = this.getToken();
-        
-        const headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            ...options.headers
-        };
+    async makeAuthenticatedRequest(url, options = {}) {
+        try {
+            const response = await fetch(url, {
+                ...options,
+                headers: {
+                    ...this.getAuthHeaders(),
+                    ...options.headers
+                }
+            });
 
-        // Add Authorization header if token exists
-        if (token) {
-            headers['Authorization'] = `Bearer ${token}`;
+            const data = await response.json();
+            return { success: response.ok, data, status: response.status };
+        } catch (error) {
+            return { success: false, data: { message: error.message }, status: 0 };
         }
+    }
 
-        const config = {
-            ...options,
-            headers
-        };
+    // Check if token is expired
+    isTokenExpired() {
+        const token = this.getToken();
+        if (!token) return true;
 
         try {
-            const response = await fetch(`${this.baseURL}${endpoint}`, config);
-            
-            if (response.status === 401) {
-                // Token expired or invalid
-                this.removeToken();
-                throw new Error('Authentication required. Please log in again.');
-            }
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-            }
-
-            return await response.json();
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            const currentTime = Date.now() / 1000;
+            return payload.exp < currentTime;
         } catch (error) {
-            throw error;
+            return true;
         }
     }
 
-    // Section management methods
-    async getSectionsByProgramYear(program, yearLevel = null) {
-        let endpoint = `/admin/sections_by_program_year_specific?program=${encodeURIComponent(program)}`;
-        if (yearLevel) {
-            endpoint += `&year_level=${encodeURIComponent(yearLevel)}`;
+    // Refresh token if needed
+    async refreshTokenIfNeeded() {
+        if (this.isTokenExpired()) {
+            await this.logout();
+            return false;
         }
-        
-        return this.makeRequest(endpoint);
-    }
-
-    async getAllSections() {
-        return this.makeRequest('/admin/sections');
-    }
-
-    async getSection(sectionId) {
-        return this.makeRequest(`/admin/sections/${sectionId}`);
-    }
-
-    async createSection(sectionData) {
-        return this.makeRequest('/admin/sections', {
-            method: 'POST',
-            body: JSON.stringify(sectionData)
-        });
-    }
-
-    async updateSection(sectionId, sectionData) {
-        return this.makeRequest(`/admin/sections/${sectionId}`, {
-            method: 'PUT',
-            body: JSON.stringify(sectionData)
-        });
-    }
-
-    async deleteSection(sectionId) {
-        return this.makeRequest(`/admin/sections/${sectionId}`, {
-            method: 'DELETE'
-        });
-    }
-
-    async getPrograms() {
-        return this.makeRequest('/admin/programs');
-    }
-
-    async getYearLevels() {
-        return this.makeRequest('/admin/year-levels');
-    }
-
-    async getAdvisers() {
-        return this.makeRequest('/admin/advisers');
-    }
-
-    async getSectionStudents(sectionId) {
-        return this.makeRequest(`/admin/sections/${sectionId}/students`);
-    }
-
-    async assignStudents(sectionId, studentIds) {
-        return this.makeRequest(`/admin/sections/${sectionId}/assign-students`, {
-            method: 'POST',
-            body: JSON.stringify({ student_ids: studentIds })
-        });
-    }
-
-    async removeStudents(sectionId, studentIds) {
-        return this.makeRequest(`/admin/sections/${sectionId}/remove-students`, {
-            method: 'POST',
-            body: JSON.stringify({ student_ids: studentIds })
-        });
+        return true;
     }
 }
 
 // Create global instance
 const authHelper = new AuthHelper();
 
-// Export for use in other files
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { AuthHelper, authHelper };
-}
-
-// Example usage:
-/*
-// Login
-const loginResult = await authHelper.login('admin@example.com', 'password');
-if (loginResult.success) {
-    console.log('Login successful');
-}
-
-// Get sections
-try {
-    const sections = await authHelper.getSectionsByProgramYear('BSIT', '3rd');
-    console.log('Sections:', sections);
-} catch (error) {
-    console.error('Error:', error.message);
-}
-
-// Logout
-await authHelper.logout();
-*/
+// Handle OAuth callback on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('token')) {
+        const result = authHelper.handleOAuthCallback();
+        if (result.success) {
+            // Redirect to dashboard or show success message
+            console.log('OAuth login successful');
+            // You can add your own success handling here
+        }
+    }
+});
