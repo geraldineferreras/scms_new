@@ -121,13 +121,6 @@ $route['api/admin/academic-years']['get'] = 'api/AdminController/academic_years_
 $route['api/admin/students/available']['get'] = 'api/AdminController/available_students_get';
 $route['api/admin/students']['get'] = 'api/AdminController/all_students_get';
 
-// Teacher Attendance APIs (simplified for subject-section combinations)
-$route['api/teacher/attendance/subjects']['get'] = 'api/TeacherController/attendance_subjects_get';
-$route['api/teacher/attendance/qr-scan']['post'] = 'api/TeacherController/attendance_qr_scan';
-$route['api/teacher/attendance/manual']['post'] = 'api/TeacherController/attendance_manual';
-$route['api/teacher/attendance/records']['get'] = 'api/TeacherController/attendance_records_get';
-$route['api/teacher/attendance/stats']['get'] = 'api/TeacherController/attendance_stats_get';
-
 // Student APIs
 $route['api/student/grades']['get'] = 'studentcontroller/get_my_grades';
 $route['api/student/join-class']['post'] = 'api/StudentController/join_class';
