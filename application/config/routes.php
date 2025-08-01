@@ -127,6 +127,23 @@ $route['api/student/join-class']['post'] = 'api/StudentController/join_class';
 $route['api/student/my-classes']['get'] = 'api/StudentController/my_classes';
 $route['api/student/leave-class']['delete'] = 'api/StudentController/leave_class';
 
+// Teacher Attendance APIs
+$route['api/teacher/attendance/record']['post'] = 'api/TeacherController/attendance_record';
+$route['api/teacher/attendance/qr-scan']['post'] = 'api/TeacherController/attendance_qr_scan';
+$route['api/teacher/attendance/manual']['post'] = 'api/TeacherController/attendance_manual';
+$route['api/teacher/attendance/by-class/(:num)']['get'] = 'api/TeacherController/attendance_by_class/$1';
+$route['api/teacher/attendance/by-date/(:any)']['get'] = 'api/TeacherController/attendance_by_date/$1';
+$route['api/teacher/attendance/update/(:num)']['put'] = 'api/TeacherController/attendance_update/$1';
+$route['api/teacher/attendance/(:num)']['delete'] = 'api/TeacherController/attendance_delete/$1';
+$route['api/teacher/attendance/stats']['get'] = 'api/TeacherController/attendance_stats';
+$route['api/teacher/attendance/export']['get'] = 'api/TeacherController/attendance_export';
+
+// Teacher Subject/Section APIs
+$route['api/teacher/subjects']['get'] = 'api/TeacherController/teacher_subjects';
+$route['api/teacher/sections/(:num)']['get'] = 'api/TeacherController/sections_by_subject/$1';
+$route['api/teacher/classes/(:num)/(:num)']['get'] = 'api/TeacherController/classes_by_subject_section/$1/$2';
+$route['api/teacher/students/(:num)']['get'] = 'api/TeacherController/students_by_class/$1';
+
 // Admin User Management
 $route['api/change-status']['post'] = 'api/auth/change_user_status';
 
