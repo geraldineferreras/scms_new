@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Endpoint Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>API Endpoint Test</h1>
+    
+    <div class="test-section">
+        <h3>Test 1: Login Endpoint (without index.php)</h3>
+        <button onclick="testLogin()">Test Login</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 2: Teacher Subjects (without index.php)</h3>
+        <button onclick="testTeacherSubjects()">Test Teacher Subjects</button>
+        <div id="subjects-result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>Test 3: QR Scan (without index.php)</h3>
+        <button onclick="testQRScan()">Test QR Scan</button>
+        <div id="qr-result"></div>
+    </div>
+
+    <script>
+        const baseURL = 'https://scmsnew-production.up.railway.app/api';
+        let authToken = '';
+
+        async function testLogin() {
+            const resultDiv = document.getElementById('login-result');
+            resultDiv.innerHTML = '<p>Testing login...</p>';
+            
+            try {
+                const response = await fetch(`${baseURL}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'jlquiambao@example.com',
+                        password: 'password123'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    authToken = data.data.token;
+                    resultDiv.className = 'test-section success';
+                    resultDiv.innerHTML = `
+                        <h4>✅ Login Successful!</h4>
+                        <p><strong>Token:</strong> ${authToken.substring(0, 50)}...</p>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.className = 'test-section error';
+                    resultDiv.innerHTML = `
+                        <h4>❌ Login Failed</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = `
+                    <h4>❌ Network Error</h4>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+
+        async function testTeacherSubjects() {
+            const resultDiv = document.getElementById('subjects-result');
+            resultDiv.innerHTML = '<p>Testing teacher subjects...</p>';
+            
+            if (!authToken) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = '<h4>❌ No Auth Token</h4><p>Please login first!</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${baseURL}/teacher/subjects`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'test-section success';
+                    resultDiv.innerHTML = `
+                        <h4>✅ Teacher Subjects Retrieved!</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.className = 'test-section error';
+                    resultDiv.innerHTML = `
+                        <h4>❌ Failed to Get Subjects</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = `
+                    <h4>❌ Network Error</h4>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+
+        async function testQRScan() {
+            const resultDiv = document.getElementById('qr-result');
+            resultDiv.innerHTML = '<p>Testing QR scan...</p>';
+            
+            if (!authToken) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = '<h4>❌ No Auth Token</h4><p>Please login first!</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${baseURL}/teacher/attendance/qr-scan`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        qr_data: "IDNo: 2021305973\nFull Name: ANJELA SOFIA G. SARMIENTO\nProgram: Bachelor of Science in Information Technology",
+                        class_id: 4
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultDiv.className = 'test-section success';
+                    resultDiv.innerHTML = `
+                        <h4>✅ QR Scan Successful!</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    resultDiv.className = 'test-section error';
+                    resultDiv.innerHTML = `
+                        <h4>❌ QR Scan Failed</h4>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.className = 'test-section error';
+                resultDiv.innerHTML = `
+                    <h4>❌ Network Error</h4>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html> 
