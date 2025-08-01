@@ -53,16 +53,16 @@ $route['default_controller'] = 'api/auth';
 $route['404_override'] = '';
 $route['translate_uri_dashes'] = FALSE;
 
-// Auth
-$route['api/auth/login']['post'] = 'api/auth/login';
-$route['api/auth/register']['post'] = 'api/auth/register';
-$route['api/auth/test']['post'] = 'api/auth/test_password';
-$route['api/auth/refresh-token']['post'] = 'api/auth/refresh_token';
-$route['api/auth/validate-token']['get'] = 'api/auth/validate_token';
-$route['api/auth/logout']['post'] = 'api/auth/logout';
-$route['api/auth/google-login']['get'] = 'api/auth/google_login';
-$route['api/auth/google-callback']['get'] = 'api/auth/google_callback';
-$route['api/auth/google-signup']['post'] = 'api/auth/google_signup';
+// Auth (without /auth prefix)
+$route['api/login']['post'] = 'api/auth/login';
+$route['api/register']['post'] = 'api/auth/register';
+$route['api/test']['post'] = 'api/auth/test_password';
+$route['api/refresh-token']['post'] = 'api/auth/refresh_token';
+$route['api/validate-token']['get'] = 'api/auth/validate_token';
+$route['api/logout']['post'] = 'api/auth/logout';
+$route['api/google-login']['get'] = 'api/auth/google_login';
+$route['api/google-callback']['get'] = 'api/auth/google_callback';
+$route['api/google-signup']['post'] = 'api/auth/google_signup';
 
 // Test endpoints for debugging
 $route['api/test-auth/login']['get'] = 'api/TestAuth/login';
